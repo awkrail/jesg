@@ -94,5 +94,8 @@ This code used resources from the following projects:
 [MART](https://arxiv.org/abs/2005.05402),
 [svpc](https://github.com/misogil0116/svpc).
 
+## Media (Japanese)
+[料理動画からAIでレシピ生成　オムロンと京大の新技術](https://www.nikkei.com/article/DGXZQOUC297B00Z20C22A9000000/)
+
 ## Contact
 taichitary@gmail.com
