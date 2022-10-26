@@ -43,7 +43,7 @@ bash scripts/build_vocab.sh /path/to/glove.6B.300d.txt
 
 The general training command is:
 ```
-bash scripts/train.sh FEATURE IS_JOINT QUERY_NUM TAU MODALITY
+bash scripts/train.sh FEATURE IS_JOINT QUERY_NUM TAU MODALITY MODEL_PATH FEATURE_PATH
 ```
 `FEATURE` is related to the types of the event encoder and has two options: resnet and MIL-NCE.
 MIL-NCE achieves the better performance than the ResNet features.
@@ -62,15 +62,18 @@ Jointly learning them achieves the higher.
 `QUERY_NUM` and `TAU` can be selectable from `[25, 50, 100, 200]` and `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]`, respectively.
 In our experiments, `QUERY_NUM=25` and `TAU=0.5` achieves the best performance.
 
+For `MODEL_PATH`, please specify the directory you want to save the model's parameters. 
+For `FEATURE_PATH`, please specify the directory, whcih contains features you saved (MIL-NCE or ResNet).
+
 ### How to reproduce the experiments?
 If you want to acheive a comparable result to Table 2, run
 ```
-bash scripts/train.sh mil joint 100 0.5
+bash scripts/train.sh mil joint 100 0.5 /path/to/model/ /path/to/features/
 ```
-If you want to reproduce Table 7, run
-```
-bash scripts/train.sh mil joint {25, 50, 100, 200} 0.5
-```
+If you want to reproduce Table 7, change the `QUERY_NUM` from `[25, 50, 100, 200]`.
+
+### Pre-trained model
+TBD
 
 ### Misc
 The code of BIVT is under construction due to our legacy reason.
