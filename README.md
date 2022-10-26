@@ -8,41 +8,72 @@ Based on this, we hypothesize that we can obtain correct recipes by selecting or
 
 ## Getting started
 ### Features
+#### Word embedding
+Pre-trained GloVe word embedding is necessary for training our model.
+Download from [here](https://nlp.stanford.edu/data/glove.6B.zip) and unzip it.
+In our experiments, we use `glove.6B.300d.txt` so save it to `/path/to/glove.6B.300d.txt`.
+
+## Event features encoded by the ResNet and MIL-NCE
+#### ResNet
+Download [features.tar.gz](https://drive.google.com/file/d/1T5COAiqhIgqKvHzzsY2bw29fSuX68E39/view?usp=sharing) from Google drive.
+The features/ directory stores ResNet + BN-Inception features for each video.
+```
+features
+├── testing
+├── training
+├── validation
+└── yc2
+```
+
+#### MIL-NCE
+Download []() from Google drive.
 ```
 [TBD]
 ```
 
-### Training and Inference
-We give examples on how to perform training and inference with MART.
-
+### Training
 0. Build Vocabulary
+Pre-compute the vocabulary embedding via GloVe. Run the following command with the saved GloVe file like:
 ```
-bash scripts/build_vocab.sh DATASET_NAME
+bash scripts/build_vocab.sh /path/to/glove.6B.300d.txt
 ```
-`DATASET_NAME` can be `anet` for ActivityNet Captions or `yc2` for YouCookII.
 
 
-1. MART training
+1. Training
 
 The general training command is:
 ```
-bash scripts/train.sh DATASET_NAME MODEL_TYPE
+bash scripts/train.sh FEATURE IS_JOINT QUERY_NUM TAU MODALITY
 ```
-| MODEL_TYPE         | Description                            |
+`FEATURE` is related to the types of the event encoder and has two options: resnet and MIL-NCE.
+MIL-NCE achieves the better performance than the ResNet features.
+| FEATURE            | Description                            |
 |--------------------|----------------------------------------|
-| mart               | Memory Augmented Recurrent Transformer |
-| xl                 | Transformer-XL                         |
-| xlrg               | Transformer-XL with recurrent gradient |
-| mtrans             | Vanilla Transformer                    |
-| mart_no_recurrence | mart with recurrence disabled          |
+| resnet             | Use resnet features as the inputs      |
+| mil                | Use the MIL-NCE features as the inputs |
 
+`IS_JOINT` decides whether you train the model with jointly fusing memories or sepearately learning them.
+Jointly learning them achieves the higher.
+| FEATURE            | Description                            |
+|--------------------|----------------------------------------|
+| joint              | Joint learning of memories             |
+| seperate           | Seperately learning them               |
 
-To train our MART model on ActivityNet Captions:
+`QUERY_NUM` and `TAU` can be selectable from `[25, 50, 100, 200]` and `[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]`, respectively.
+In our experiments, `QUERY_NUM=25` and `TAU=0.5` achieves the best performance.
+
+### How to reproduce the experiments?
+If you want to acheive a comparable result to Table 2, run
 ```
-bash scripts/train.sh anet mart
+bash scripts/train.sh mil joint 100 0.5
 ```
-Training log and model will be saved at `results/anet_re_*`.  
-Once you have a trained model, you can follow the instructions below to generate captions. 
+If you want to reproduce Table 7, run
+```
+bash scripts/train.sh mil joint {25, 50, 100, 200} 0.5
+```
+
+### Misc
+The code of BIVT is under construction due to our legacy reason.
 
 ## Citations
 If you find this code useful for your research, please cite our paper:
@@ -55,7 +86,7 @@ If you find this code useful for your research, please cite our paper:
 }
 ```
 
-## Others
+## Reference
 This code used resources from the following projects: 
 [MART](https://arxiv.org/abs/2005.05402),
 [svpc](https://github.com/misogil0116/svpc).
