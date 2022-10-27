@@ -1558,34 +1558,17 @@ class RecursiveTransformer(nn.Module):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
-    def compute_tIoU_based_softmax(self, tiou_scores):
-        tiou_scores[tiou_scores == 0] = -1e5
-        tiou_scores = torch.softmax(tiou_scores, dim=1)
-        
-        # smoothing end of event tokens
-        if (tiou_scores[:,0] == 1).any():
-            alpha = 0.5
-            eoe_indices = (tiou_scores[:, 0] == 1)
-            one_hot_label = tiou_scores[eoe_indices]
-            smoothed_tensor = torch.zeros_like(one_hot_label).cuda()
-            for idx in range(len(smoothed_tensor)):
-                smoothed_tensor[idx][0] = alpha
-                smoothed_tensor[idx][1:] = (1 - alpha) / (self.config.max_v_len - 1)
-            tiou_scores[eoe_indices] = smoothed_tensor
-
-        return tiou_scores
-
     def forward_step(self, video_prev_ms, text_prev_ms, video_feature, 
                      video_mask, event_feature, event_abs_feature, event_labels, text_ids, 
-                     text_mask, text_labels, gt_timestamps, tiou_scores):
+                     text_mask, text_labels):
         """single step forward in the recursive structure"""
         # video encode w/ memory
-        embeddings, embed_mask = self.compute_embeddings(video_feature, video_mask, event_feature, event_abs_feature)
+        embeddings, embed_mask = self.compute_embeddings(video_feature, video_mask, 
+                                                         event_feature, event_abs_feature)
         video_prev_ms, encoded_layer_outputs = self.encoder(
             video_prev_ms, embeddings, embed_mask, output_all_encoded_layers=False)  # both outputs are list
         # select events
-        event_loss, selected_event_feats = self.select_event(video_prev_ms, encoded_layer_outputs[-1], event_labels, 
-                                                             event_abs_feature, gt_timestamps, tiou_scores)
+        event_loss, selected_event_feats = self.select_event(video_prev_ms, encoded_layer_outputs[-1], event_labels)
         # text decode w/ memory
         text_prev_ms, caption_loss, prediction_scores = self.decode(text_prev_ms, selected_event_feats, 
                                                                     text_ids, text_mask, text_labels)
@@ -1596,7 +1579,6 @@ class RecursiveTransformer(nn.Module):
     def decode(self, prev_ms, selected_event_feats, text_ids, text_mask, text_labels):
         word_embeddings = self.embeddings(text_ids)
         selected_event_feats = selected_event_feats.unsqueeze(1)
-        # WATCH: adding two modalities is ok, other approaches?
         embeddings = selected_event_feats + word_embeddings
         prev_ms, decoder_outputs = self.decoder(prev_ms, embeddings, text_mask, selected_event_feats)
         prediction_scores = self.decoder_classifier(decoder_outputs[-1])
@@ -1604,15 +1586,7 @@ class RecursiveTransformer(nn.Module):
                                       text_labels.view(-1))
         return prev_ms, caption_loss, prediction_scores
 
-    def compute_CE_with_tIoU_loss(self, attn_energy, event_labels, tiou_scores):
-        # KL-divergence
-        attn_softmax = F.log_softmax(attn_energy, dim=-1)
-        tiou_scores = tiou_scores[event_labels != -1]
-        attn_softmax = attn_softmax[event_labels != -1]
-        return snorkel_classification.cross_entropy_with_probs(attn_softmax, tiou_scores, reduction='sum')
-
-    def select_event(self, prev_ms, encoded_layer_output, event_labels, 
-                     event_abs_features, gt_timestamps, tiou_scores, inference=False):
+    def select_event(self, prev_ms, encoded_layer_output, event_labels, inference=False):
         pooled_memory = torch.cat(prev_ms, dim=1).max(dim=1)[0]
         attn_energy = torch.einsum('ab,acb->ac', pooled_memory, encoded_layer_output) / math.sqrt(self.config.hidden_size)
 
@@ -1628,7 +1602,6 @@ class RecursiveTransformer(nn.Module):
             selected_event_feats = torch.einsum('ab,abc->ac', selected_events, encoded_layer_output)
 
             # compute loss
-            # event_loss = self.compute_CE_with_tIoU_loss(attn_energy, event_labels, tiou_scores)
             event_loss = self.event_loss_func(attn_energy, event_labels)
             return event_loss, selected_event_feats
     
@@ -1646,20 +1619,8 @@ class RecursiveTransformer(nn.Module):
         return input_embeddings, input_masks
 
     def forward(self, video_feature, video_mask, event_feature, event_abs_feature,
-                event_labels_list, text_ids_list, text_mask_list, text_labels_list, tiou_scores_list, 
-                gt_timestamps_list, return_memory=False):
-        """
-        Args:
-            input_ids_list: [(N, L)] * step_size
-            video_features_list: [(N, L, D_v)] * step_size
-            input_masks_list: [(N, L)] * step_size with 1 indicates valid bits
-            token_type_ids_list: [(N, L)] * step_size, with `0` on the first `max_v_len` bits, `1` on the last `max_t_len`
-            input_labels_list: [(N, L)] * step_size, with `-1` on ignored positions,
-                will not be used when return_memory is True, thus can be None in this case
-            return_memory: bool,
-
-        Returns:
-        """
+                event_labels_list, text_ids_list, text_mask_list, text_labels_list, 
+                return_memory=False):
         # [(N, M, D)] * num_hidden_layers, initialized internally
         video_prev_ms = [None] * self.config.num_hidden_layers
         text_prev_ms = [None] * self.config.num_hidden_layers
@@ -1672,11 +1633,11 @@ class RecursiveTransformer(nn.Module):
         total_event_loss = 0
 
         for idx in range(step_size):
-            video_prev_ms, text_prev_ms, encoded_layer_outputs, prediction_scores, caption_loss, event_loss = self.forward_step(video_prev_ms, text_prev_ms, 
+            video_prev_ms, text_prev_ms, encoded_layer_outputs,\
+                prediction_scores, caption_loss, event_loss = self.forward_step(video_prev_ms, text_prev_ms, 
                       video_feature, video_mask, event_feature, event_abs_feature, 
                       event_labels_list[idx], text_ids_list[idx], 
-                      text_mask_list[idx], text_labels_list[idx],
-                      gt_timestamps_list[idx], tiou_scores_list[idx])
+                      text_mask_list[idx], text_labels_list[idx])
 
             if self.config.joint:
                 video_prev_ms, text_prev_ms = self.memory_mixer(video_prev_ms, text_prev_ms)

@@ -73,22 +73,12 @@ class RecursiveCaptionDataset(Dataset):
         """mode: `train` or `val`"""
         logging.info("Mode {}".format(mode))
         self.mode = mode
-        if self.dset_name == "ymk":
-            if mode == "train":  # 10000 videos
-                data_path = os.path.join(self.data_dir, "train_results_anet.json")
-            elif mode == "val":  # 2500 videos
-                data_path = os.path.join(self.data_dir, "val_results_anet.json")
-            else:
-                raise ValueError("Expecting mode to be one of [`train`, `val`], got {}".format(mode))
-        elif self.dset_name == "yc2":
-            if mode == "train":  # 10000 videos
-                data_path = os.path.join(self.data_dir, "train_results_anet.json")
-            elif mode == "val":  # 2500 videos
-                data_path = os.path.join(self.data_dir, "val_results_anet.json")
-            else:
-                raise ValueError("Expecting mode to be one of [`train`, `val`], got {}".format(mode))
+        if mode == "train":  # 10000 videos
+            data_path = os.path.join(self.data_dir, "train_results_anet.json")
+        elif mode == "val":  # 2500 videos
+            data_path = os.path.join(self.data_dir, "val_results_anet.json")
         else:
-            raise ValueError
+            raise ValueError("Expecting mode to be one of [`train`, `val`], got {}".format(mode))
         self._load_data(data_path)
 
     def fix_missing(self):
@@ -101,9 +91,7 @@ class RecursiveCaptionDataset(Dataset):
                 cur_path_bn = os.path.join(self.video_feature_dir, "{}_bn.npy".format(video_name))
                 filepaths = [cur_path_resnet, cur_path_bn]
             elif self.feature_name == "mil":
-                mode_folder = 'training' if self.mode == 'train' else 'validation'
-                mil_dir = os.path.join("/mnt/LSTA6/data/nishimura/jesg/data/{}_mil/video_data_n".format(self.dset_name) + str(self.query_num), mode_folder)
-                filepaths = [os.path.join(mil_dir, video_name + ".pkl")]
+                filepaths = [os.path.join(self.video_feature_dir, video_name + ".pkl")]
             elif self.feature_name == "resnet50":
                 cur_path_resnet = os.path.join(self.video_feature_dir, "{}_resnet.npy".format(video_name))
                 filepaths = [cur_path_resnet]
@@ -123,28 +111,12 @@ class RecursiveCaptionDataset(Dataset):
         use `(idx + 1) * frame_to_second[vid_name] `
         """
         frame_to_second = {}
-        
-        if self.dset_name == "yc2":
-            sampling_sec = 0.5  # hard coded, only support 0.5 (yc2)
-        else:
-            sampling_sec = 1. # YouMakeup
-
-        if self.dset_name == "ymk":
-            # for Youmakeup, all of the videos
-            video_names = [x.replace("_resnet.npy", "") for x in os.listdir(self.video_feature_dir)]
-            for video_name in video_names:
-                frame_to_second[video_name] = 1.
-
-        elif self.dset_name == "yc2":
-            with open(self.duration_file, "r") as f:
-                for line in f:
-                    vid_name, vid_dur, vid_frame = [l.strip() for l in line.split(",")]
-                    frame_to_second[vid_name] = float(vid_dur) * math.ceil(
-                        float(vid_frame) * 1. / float(vid_dur) * sampling_sec) * 1. / float(vid_frame)  # for yc2
-
-        else:
-            raise NotImplementedError("Only support anet and yc2, got {}".format(self.dset_name))
-
+        sampling_sec = 0.5  # hard coded, only support 0.5 (yc2)
+        with open(self.duration_file, "r") as f:
+            for line in f:
+                vid_name, vid_dur, vid_frame = [l.strip() for l in line.split(",")]
+                frame_to_second[vid_name] = float(vid_dur) * math.ceil(
+                    float(vid_frame) * 1. / float(vid_dur) * sampling_sec) * 1. / float(vid_frame)  # for yc2
         return frame_to_second
 
     def _load_data(self, data_path):
@@ -411,27 +383,11 @@ class RecursiveCaptionDataset(Dataset):
             feat is padded to length of (self.max_v_len,)
             mask: self.max_v_len, with 1 indicates valid bits, 0 indicates padding
         """
-        def _zscore(feats):
-            xmean = np.mean(feats, axis=0)
-            xstd = np.std(feats, axis=0)
-            return (feats - xmean) / (xstd + 1e-8)
-        
         def _load_MIL_NCE_vfeat(name):
-            path = "/mnt/LSTA6/data/nishimura/jesg/data/{}_mil/video_data_n".format(self.dset_name) + str(self.query_num)
-            if self.mode == "train":
-                mode = "training"
-            else:
-                mode = "validation"
-            file_path = os.path.join(path, mode, name[2:] + ".pkl")
+            file_path = os.path.join(self.video_feature_dir, name[2:] + ".pkl")
             with open(file_path, "rb") as f:
                 vfeat = pickle.load(f)
-            
-            if self.modality == "multimodal":
-                v_emb_feats = np.array([x["v_emb"] for x in vfeat])
-                t_emb_feats = np.array([x["t_emb"] for x in vfeat])
-                feat = np.concatenate([v_emb_feats, t_emb_feats], axis=1)
-            else:
-                feat = np.array([x["v_emb"] for x in vfeat])
+            feat = np.array([x["v_emb"] for x in vfeat])
             return feat
         
         def _load_resnet_vfeat(name, feat_dim, feat_len, n_queries):
@@ -444,7 +400,7 @@ class RecursiveCaptionDataset(Dataset):
         n_queries = self.query_num
         if self.feature_name == "mil":
             feat = _load_MIL_NCE_vfeat(name)
-        elif self.feature_name == "resnet" or self.feature_name == "resnet50":
+        elif self.feature_name == "resnet":
             feat_len = len(raw_feat)
             feat = _load_resnet_vfeat(name, raw_feat.shape[-1], feat_len, n_queries)
         else:

@@ -31,82 +31,38 @@ def run_translate(eval_data_loader, translator, opt):
                  "results": defaultdict(list),
                  "external_data": {"used": "true", "details": "ay"}}
     for raw_batch in tqdm(eval_data_loader, mininterval=2, desc="  - (Translate)"):
-        if opt.recurrent:
-            # prepare data
-            step_sizes = raw_batch[1]  # list(int), len == bsz
-            meta = raw_batch[2]  # list(dict), len == bsz
-            batch = [prepare_batch_inputs(step_data, device=translator.device)
-                     for step_data in raw_batch[0]]
-            model_inputs = [
-                batch[0]["video_feature"],
-                batch[0]["event_feature"],
-                batch[0]["video_mask"],
-                batch[0]["event_abs_feature"],
-                [e["max_index"] for e in batch],
-                [e["text_ids"] for e in batch],
-                [e["text_mask"] for e in batch],
-                [e["text_labels"] for e in batch],
-                [e["tiou_scores"] for e in batch]
-            ]
+        # prepare data
+        step_sizes = raw_batch[1]  # list(int), len == bsz
+        meta = raw_batch[2]  # list(dict), len == bsz
+        batch = [prepare_batch_inputs(step_data, device=translator.device) for step_data in raw_batch[0]]
+        model_inputs = [
+            batch[0]["video_feature"],
+            batch[0]["event_feature"],
+            batch[0]["video_mask"],
+            batch[0]["event_abs_feature"],
+            [e["max_index"] for e in batch],
+            [e["text_ids"] for e in batch],
+            [e["text_mask"] for e in batch],
+            [e["text_labels"] for e in batch],
+        ]
 
-            dec_seq_list, selected_event_indices_list = translator.translate_batch(
-                model_inputs, use_beam=opt.use_beam, recurrent=True, untied=False, xl=opt.xl)
+        dec_seq_list, selected_event_indices_list = translator.translate_batch(
+            model_inputs, use_beam=opt.use_beam, recurrent=True, untied=False, xl=opt.xl)
 
-            selected_event_indices = torch.cat(selected_event_indices_list).view(-1, len(meta))
-            # example_idx indicates which example is in the batch
-            for example_idx in range(len(meta)):
-                # step_idx or we can also call it sen_idx
-                cur_meta = meta[example_idx]
-                event_indices = selected_event_indices[:, example_idx][selected_event_indices[:, example_idx] != 0]
-                for step_idx, step_batch in enumerate(dec_seq_list[:len(event_indices)]):
-                    event_index = event_indices[step_idx]
-                    batch_res["results"][cur_meta["name"]].append({
-                        "sentence": eval_data_loader.dataset.convert_ids_to_sentence(
-                            step_batch[example_idx].cpu().tolist()).encode("ascii", "ignore"),
-                        "timestamp": cur_meta["timestamp"][0][event_index.item()-1],
-                        "pred_index": event_index.item()-1 # -1 is necessary to specify the predicted events
-                        })
-
-        else:  # single sentence
-            meta = raw_batch[2]  # list(dict), len == bsz
-            batched_data = prepare_batch_inputs(raw_batch[0], device=translator.device)
-            if opt.untied or opt.mtrans:
-                model_inputs = [
-                    batched_data["video_feature"],
-                    batched_data["event_feature"],
-                    batched_data["video_mask"],
-                    batched_data["max_index"],
-                    batched_data["text_ids"],
-                    batched_data["text_mask"],
-                    batched_data["text_labels"],
-                    batched_data["tiou_scores"]
-                ]
-            else:
-                model_inputs = [
-                    batched_data["input_ids"],
-                    batched_data["video_feature"],
-                    batched_data["input_mask"],
-                    batched_data["token_type_ids"]
-                ]
-
-            dec_seq, selected_event_indices = translator.translate_batch(
-                model_inputs, use_beam=opt.use_beam, recurrent=False, untied=opt.untied or opt.mtrans)
-
-            # example_idx indicates which example is in the batch
-            for example_idx, (cur_gen_sen, cur_meta, event_index) in enumerate(zip(dec_seq, meta, selected_event_indices)):
-                cur_data = {
+        selected_event_indices = torch.cat(selected_event_indices_list).view(-1, len(meta))
+        # example_idx indicates which example is in the batch
+        for example_idx in range(len(meta)):
+            # step_idx or we can also call it sen_idx
+            cur_meta = meta[example_idx]
+            event_indices = selected_event_indices[:, example_idx][selected_event_indices[:, example_idx] != 0]
+            for step_idx, step_batch in enumerate(dec_seq_list[:len(event_indices)]):
+                event_index = event_indices[step_idx]
+                batch_res["results"][cur_meta["name"]].append({
                     "sentence": eval_data_loader.dataset.convert_ids_to_sentence(
-                        cur_gen_sen.cpu().tolist()).encode("ascii", "ignore"),
-                    "timestamp": cur_meta["timestamp"][event_index],
-                    "gt_sentence": cur_meta["gt_sentence"],
-                    "gt_timestamp": cur_meta["gt_timestamp"],
-                    "max_index": cur_meta["max_index"],
-                    "pred_index": event_index.item()
-                }
-                batch_res["results"][cur_meta["name"]].append(cur_data)
-
-        if opt.debug:
-            break
+                        step_batch[example_idx].cpu().tolist()).encode("ascii", "ignore"),
+                    "timestamp": cur_meta["timestamp"][0][event_index.item()-1],
+                    "pred_index": event_index.item()-1 # -1 is necessary to specify the predicted events
+                    })
 
     batch_res["results"] = sort_res(batch_res["results"])
     return batch_res

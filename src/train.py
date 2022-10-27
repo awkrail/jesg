@@ -64,18 +64,15 @@ def train_epoch(model, training_data, optimizer, ema, device, opt, writer, epoch
             event_feature = batched_data[0]["event_feature"]
             event_abs_feature = batched_data[0]["event_abs_feature"]
             video_mask = batched_data[0]["video_mask"]
-            gt_timestamps_list = [e["gt_normed_timestamp"] for e in batched_data]
             event_labels_list = [e["max_index"] for e in batched_data]
             text_ids_list = [e["text_ids"] for e in batched_data]
             text_mask_list = [e["text_mask"] for e in batched_data]
             text_labels_list = [e["text_labels"] for e in batched_data]
-            tiou_scores_list = [e["tiou_scores"] for e in batched_data]
 
             # forward & backward
             optimizer.zero_grad()
             cap_loss, event_loss, pred_scores_list = model(video_feature, video_mask, event_feature, event_abs_feature,
-                                                           event_labels_list, text_ids_list, text_mask_list, text_labels_list, 
-                                                           tiou_scores_list, gt_timestamps_list)
+                                                           event_labels_list, text_ids_list, text_mask_list, text_labels_list)
             loss = cap_loss + event_loss
             input_labels_list = text_labels_list
 
@@ -133,16 +130,13 @@ def eval_epoch(model, validation_data, device, opt):
                 event_feature = batched_data[0]["event_feature"]
                 event_abs_feature = batched_data[0]["event_abs_feature"]
                 video_mask = batched_data[0]["video_mask"]
-                gt_timestamps_list = [e["gt_normed_timestamp"] for e in batched_data]
                 event_labels_list = [e["max_index"] for e in batched_data]
                 text_ids_list = [e["text_ids"] for e in batched_data]
                 text_mask_list = [e["text_mask"] for e in batched_data]
                 text_labels_list = [e["text_labels"] for e in batched_data]
-                tiou_scores_list = [e["tiou_scores"] for e in batched_data]
 
                 cap_loss, event_loss, pred_scores_list = model(video_feature, video_mask, event_feature, event_abs_feature, 
-                                                               event_labels_list, text_ids_list, text_mask_list, 
-                                                               text_labels_list, tiou_scores_list, gt_timestamps_list)
+                                                               event_labels_list, text_ids_list, text_mask_list, text_labels_list)
                 input_labels_list = text_labels_list
 
             # keep logs
@@ -183,11 +177,7 @@ def eval_language_metrics(checkpoint, eval_data_loader, opt, model=None, eval_mo
             data["sentence"] = data["sentence"].decode()
     
     save_json(json_res, res_filepath, save_pretty=True)
-
-    if opt.dset_name == "ymk":
-        reference_files_map = {"val": ["/home/nishimura/research/recipe_generation/jesg_base/densevid_eval/our_ymk_data_100/ymk_val.json"]}
-    else:  # yc2
-        reference_files_map = {"val": ["/home/nishimura/research/recipe_generation/jesg_base/densevid_eval/our_yc2_data_100/val_yc2.json"]}
+    reference_files_map = {"val": [os.path.join(os.getcwd(), opt.data_dir, "val_yc2.json")]}
     
     # COCO language evaluation w/ densevid eval
     eval_references = reference_files_map[eval_mode]
@@ -453,7 +443,6 @@ def get_args():
     parser.add_argument("--query_num", type=int, required=True, help="the number of queries")
     parser.add_argument("--joint", action="store_true", help="seperately learning memories or not")
     parser.add_argument("--tau", type=float, default=0.5, help="hyper-parameter tau of gumbel-softmax")
-    parser.add_argument("--modality", type=str, required=True, help="input modality: vonly or multimodal")
 
     opt = parser.parse_args()
     opt.cuda = not opt.no_cuda
@@ -508,14 +497,8 @@ def main():
     np.random.seed(opt.seed)
     torch.manual_seed(opt.seed)
 
-    if opt.dset_name == "yc2":
-        train_video_feature_dir = os.path.join(opt.video_feature_dir, "training")
-        val_video_feature_dir = os.path.join(opt.video_feature_dir, "validation")
-    elif opt.dset_name == "ymk":
-        train_video_feature_dir = opt.video_feature_dir
-        val_video_feature_dir = opt.video_feature_dir
-    else:
-        raise ValueError("Expecting dset_name to be one of [`ymk`, `yc2`], got {}".format(opt.dset_name))
+    train_video_feature_dir = os.path.join(opt.video_feature_dir, "training")
+    val_video_feature_dir = os.path.join(opt.video_feature_dir, "validation")
 
     train_dataset = RCDataset(
         dset_name=opt.dset_name,
@@ -524,7 +507,7 @@ def main():
         word2idx_path=opt.word2idx_path, max_t_len=opt.max_t_len,
         max_v_len=opt.max_v_len, max_n_sen=opt.max_n_sen, mode="train",
         recurrent=opt.recurrent, untied=opt.untied or opt.mtrans, feature_name=opt.feature,
-        query_num=opt.query_num, joint=opt.joint, modality=opt.modality)
+        query_num=opt.query_num, joint=opt.joint)
 
     # add 10 at max_n_sen to make the inference stage use all the segments
     val_dataset = RCDataset(
@@ -534,7 +517,7 @@ def main():
         word2idx_path=opt.word2idx_path, max_t_len=opt.max_t_len,
         max_v_len=opt.max_v_len, max_n_sen=opt.max_n_sen+10, mode="val",
         recurrent=opt.recurrent, untied=opt.untied or opt.mtrans, feature_name=opt.feature,
-        query_num=opt.query_num, joint=opt.joint, modality=opt.modality)
+        query_num=opt.query_num, joint=opt.joint)
 
     if opt.recurrent:
         collate_fn = caption_collate
@@ -576,27 +559,9 @@ def main():
         query_num=opt.query_num,
         joint=opt.joint,
         tau=opt.tau,
-        modality=opt.modality,
     )
 
-    if opt.recurrent:
-        if opt.xl:
-            logger.info("Use recurrent model - TransformerXL" + " (with gradient)" if opt.xl_grad else "")
-            model = TransformerXL(rt_config)
-        else:
-            logger.info("Use recurrent model - Mine")
-            model = RecursiveTransformer(rt_config)
-    else:  # single sentence, including untied
-        if opt.untied:
-            logger.info("Use untied non-recurrent single sentence model")
-            model = NonRecurTransformerUntied(rt_config)
-        elif opt.mtrans:
-            logger.info("Use masked transformer -- another non-recurrent single sentence model")
-            model = MTransformer(rt_config)
-        else:
-            logger.info("Use non-recurrent single sentence model")
-            model = NonRecurTransformer(rt_config)
-
+    model = RecursiveTransformer(rt_config)
     if opt.glove_path is not None:
         if hasattr(model, "embeddings"):
             logger.info("Load GloVe as word embedding")

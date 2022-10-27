@@ -5,9 +5,10 @@ query_num=$3 # yc2=[25, 50, 100, 200]
 tau=$4 # [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 model_path=$5 # path to save the model
 v_feat_dir=$6 # path to save the feature path
+dur_file=$7 # duration file
 
-dset_name = "yc2"
-model_type = "base"
+dset_name="yc2"
+model_type="base"
 data_dir="./densevid_eval3/json_data/our_${dset_name}_data_${query_num}"
 word2idx_path="./cache/${dset_name}_word2idx.json"
 glove_path="./cache/${dset_name}_vocab_glove.pt"
@@ -18,8 +19,7 @@ echo ">>>>>>>> Running training on ${dset_name} dataset"
 max_n_sen=13
 max_t_len=22  # including "BOS" and "EOS"
 max_v_len=$((query_num+1))
-v_feat_dir="/mnt/LSTA6/data/nishimura/youcook2/features/"
-dur_file="/mnt/LSTA6/data/nishimura/youcook2/features/yc2/${dset_name}_duration_frame.csv"
+dur_file="misc/${dset_name}_duration_frame.csv"
 
 echo ">>>>>>>> Model type ${model_type}"
 echo "---------------------------------------------------------"
@@ -51,6 +51,5 @@ python src/train.py \
 --feature ${feature} \
 --query_num ${query_num} \
 --tau ${tau} \
---modality ${modality} \
 --exp_id init \
 ${extra_args[@]} 
