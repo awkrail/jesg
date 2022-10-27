@@ -33,6 +33,7 @@ Download []() from Google drive.
 
 ### Training
 0. Build Vocabulary
+
 Pre-compute the vocabulary embedding via GloVe. Run the following command with the saved GloVe file like:
 ```
 bash scripts/build_vocab.sh /path/to/glove.6B.300d.txt
@@ -76,11 +77,11 @@ If you want to reproduce Table 7, change the `QUERY_NUM` from `[25, 50, 100, 200
 TBD
 
 ### Questions
-- Q. The code of BIVT version? 
+#### Q. The code of BIVT version? 
 
 A. The code of BIVT is under construction due to our legacy reason. Stay tuned!
 
-- Q. How do I use the code for our own videos? 
+#### Q. How do I use the code for our own videos? 
 
 A. Run [PDVC](https://github.com/ttengwang/PDVC) to get the event candidates, then convert the output to `densevid_eval3/json_data/our_yc2_data_100/train_results_anet.json` format. Then run the `scripts/train.sh`. We do not support any convert scripts.
 
