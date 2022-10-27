@@ -13,7 +13,7 @@ Pre-trained GloVe word embedding is necessary for training our model.
 Download from [here](https://nlp.stanford.edu/data/glove.6B.zip) and unzip it.
 In our experiments, we use `glove.6B.300d.txt` so save it to `/path/to/glove.6B.300d.txt`.
 
-## Event features encoded by the ResNet and MIL-NCE
+### Event features encoded by the ResNet and MIL-NCE
 #### ResNet
 Download [features.tar.gz](https://drive.google.com/file/d/1T5COAiqhIgqKvHzzsY2bw29fSuX68E39/view?usp=sharing) from Google drive.
 The features/ directory stores ResNet + BN-Inception features for each video.
@@ -75,8 +75,14 @@ If you want to reproduce Table 7, change the `QUERY_NUM` from `[25, 50, 100, 200
 ### Pre-trained model
 TBD
 
-### Misc
-The code of BIVT is under construction due to our legacy reason.
+### Questions
+- Q. The code of BIVT version? 
+
+A. The code of BIVT is under construction due to our legacy reason. Stay tuned!
+
+- Q. How do I use the code for our own videos? 
+
+A. Run [PDVC](https://github.com/ttengwang/PDVC) to get the event candidates, then convert the output to `densevid_eval3/json_data/our_yc2_data_100/train_results_anet.json` format. Then run the `scripts/train.sh`. We do not support any convert scripts.
 
 ## Citations
 If you find this code useful for your research, please cite our paper:
