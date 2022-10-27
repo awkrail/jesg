@@ -5,7 +5,6 @@ query_num=$3 # yc2=[25, 50, 100, 200]
 tau=$4 # [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
 model_path=$5 # path to save the model
 v_feat_dir=$6 # path to save the feature path
-dur_file=$7 # duration file
 
 dset_name="yc2"
 model_type="base"
