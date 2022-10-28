@@ -26,9 +26,21 @@ features
 ```
 
 #### MIL-NCE
-Download []() from Google drive.
+Download [yc2_mil.tar.gz](https://drive.google.com/file/d/1y1_GHqYunQMZAO1vrCixvBZn-2xZMX-7/view?usp=sharing) from Google drive. The yc2_mil directory stores event-level features for each video.
 ```
-[TBD]
+yc2_mil
+├── video_data_n100
+│   ├── training
+│   └── validation
+├── video_data_n200
+│   ├── training
+│   └── validation
+├── video_data_n25
+│   ├── training
+│   └── validation
+└── video_data_n50
+    ├── training
+    └── validation
 ```
 
 ### Training
